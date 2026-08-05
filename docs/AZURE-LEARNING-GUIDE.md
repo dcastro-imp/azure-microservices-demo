@@ -888,6 +888,68 @@ sqlExpression: 'sys.Label = \'OrderCreated\''
 
 ---
 
+## Proyecto 5: Gobernanza y Cost Management
+
+Área completamente nueva, útil tanto en la práctica como para el examen **AZ-900** (dominio "Gestión y gobernanza", 30-35% del examen) — a diferencia de los proyectos anteriores, esto es 100% configuración/conceptos, no código de aplicación.
+
+### 1. Tags — organizar y rastrear costos
+```bash
+az group update --name rg-microservices --tags project=microservices-demo environment=learning owner=dennis
+```
+Los tags no son solo metadata — se usan para **filtrar el Cost Analysis por proyecto/ambiente/dueño**, y son la base para Azure Policy (siguiente punto).
+
+### 2. Azure Policy — ⚠️ cuidado con el efecto `deny`
+
+Primer intento: la política incorporada **"Require a tag on resources"** — pero tiene efecto `deny` **fijo** (no configurable), lo que **bloquearía cualquier recurso nuevo** (incluyendo futuros despliegues de Bicep) que no tuviera el tag exacto. Se descartó por seguridad:
+```bash
+az policy definition show --name "871b6d14-10aa-478d-b590-94f262ecfa99" --query "policyRule.then.effect" -o tsv
+# → "deny"
+```
+
+**Alternativa usada**: la política incorporada **"Inherit a tag from the resource group if missing"** — efecto `modify`, **nunca bloquea**, solo **auto-completa** el tag faltante copiándolo del resource group:
+```bash
+az policy assignment create \
+  --name inherit-environment-tag \
+  --scope $RG_ID \
+  --policy "ea3f2387-9b95-492a-a190-fcdc54f7b070" \
+  --params '{"tagName": {"value": "environment"}}' \
+  --mi-system-assigned --identity-scope $RG_ID --role Contributor --location centralus
+```
+Nota: las políticas con efecto `modify` (o `deployIfNotExists`) necesitan su propia **Managed Identity** con permisos — porque la política misma va a *escribir* cambios, no solo evaluarlos. Se confirmó funcionando: un Action Group creado después automáticamente apareció con `"tags": {"environment": "learning"}` sin que lo pusiéramos manualmente.
+
+**Lección clave de AZ-900**: los efectos de política más comunes son `Deny` (bloquea), `Audit` (solo reporta, no bloquea), y `Modify`/`DeployIfNotExists` (corrige automáticamente) — elegir el correcto importa mucho para no romper un ambiente en producción.
+
+### 3. Resource Lock — red de seguridad independiente del código
+```bash
+az lock create --name protect-sql-server --resource-group rg-microservices \
+  --resource sql-microservices-dennis --resource-type Microsoft.Sql/servers \
+  --lock-type CanNotDelete
+```
+Con esto, **ni siquiera un `az group delete` completo** podría borrar el resource group mientras el SQL Server tenga este lock — Azure lo rechaza a nivel de plataforma. Es la protección real contra el escenario que discutimos: un cambio de Bicep que sin querer fuerza un "reemplazo" (borrar+crear) de un recurso con datos.
+
+### 4. Budget + alerta de costo
+
+El CLI (`az consumption budget create`, comando en preview) no soporta `--notifications` en esta versión — se creó vía `az rest` llamando directo a la API de ARM:
+```bash
+az rest --method put \
+  --uri "https://management.azure.com/subscriptions/$SUB_ID/providers/Microsoft.Consumption/budgets/microservices-monthly-budget?api-version=2023-11-01" \
+  --body @budget.json   # incluye "notifications" con threshold=80, contactEmails
+```
+**Lección**: cuando un comando del CLI no expone algo que la API sí soporta (común en comandos marcados "preview"), `az rest` es la vía de escape — llama la API REST de Azure directamente con las credenciales ya autenticadas del CLI.
+
+### 5. Azure Monitor: Action Group + Activity Log Alert
+```bash
+az monitor action-group create --name ag-microservices-alerts --resource-group rg-microservices \
+  --short-name msalerts --email-receivers @email-receivers.json   # JSON file, el shorthand syntax con espacios da error
+
+az monitor activity-log alert create --name alert-resource-deleted --resource-group rg-microservices \
+  --scope $RG_ID --condition category=Administrative and operationName=Microsoft.Resources/subscriptions/resourceGroups/delete \
+  --action-group $AG_ID
+```
+Un **Action Group** es el "hacia dónde" de cualquier alerta (email, SMS, webhook, Logic App...) — se define una sola vez y se reutiliza en muchas alertas distintas. Una **Activity Log Alert** dispara sobre *operaciones de gestión* (crear/borrar/modificar recursos), a diferencia de una alerta de *métricas* (CPU, memoria) que vigila el comportamiento en tiempo de ejecución.
+
+---
+
 ## Aprendizajes generales (aplican a cualquier proyecto Azure)
 
 1. **Resource Providers**: cada namespace de servicio (`Microsoft.Sql`, `Microsoft.Storage`, etc.) debe registrarse una vez por suscripción antes de su primer uso. Si ves `MissingSubscriptionRegistration` o `SubscriptionNotFound` en un servicio que nunca usaste, registra el provider.
