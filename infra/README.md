@@ -109,3 +109,10 @@ az role assignment create --assignee $APP_ID --role Contributor --scope /subscri
    - En cada uno: agregar las variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `ACR_NAME` (con los valores de CADA ambiente — así `dev` apunta a su propio ACR/suscripción, distinto de `prod`).
 
 **3. Correr el workflow**: `Actions` → `Deploy infrastructure` → `Run workflow` (es manual a propósito — cambios de infra no deberían dispararse en cada commit como el código de la app).
+
+### Gotchas reales encontrados al probar esto en vivo
+
+1. **`subject` de OIDC con formato inesperado**: el error `AADSTS700213` reveló que GitHub envía `repo:owner@ownerId/repo@repoId:environment:X` (con IDs numéricos), no el formato simple `repo:owner/repo:environment:X` de la documentación básica — hubo que crear el federated credential con el subject EXACTO que aparece en el mensaje de error.
+2. **Un "required status check" atado a un workflow con `paths:` filtrado se queda esperando para siempre** en cualquier PR que no toque esos archivos — la solución es quitar el filtro del *trigger* y filtrar *dentro* del job (con `dorny/paths-filter`), para que el check SIEMPRE reporte algo.
+3. **`required_status_checks.strict: true`** exige que la rama del PR esté al día con `main` antes de mergear — no basta con que los checks pasen.
+4. **`required_pull_request_reviews` con mantenedor único**: nadie más puede aprobar tus propios PRs — la única salida sin agregar colaboradores es `enforce_admins: false` + `gh pr merge --admin`, que salta la protección a propósito. Vale la pena decidir conscientemente si esto es aceptable para tu caso.
