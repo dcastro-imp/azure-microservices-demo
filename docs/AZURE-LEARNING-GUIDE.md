@@ -742,6 +742,57 @@ await cmd.ExecuteNonQueryAsync();
 
 ## Proyecto 4: Infraestructura como código (Bicep) para los microservicios
 
+### Bicep para principiantes (lo esencial)
+
+**Declarativo vs. imperativo**: con `az` (CLI) le dices a Azure *"haz esto, luego esto"* paso a paso. Con Bicep describes *el resultado final que quieres*, y Azure decide cómo llegar ahí — por eso se puede comparar contra la realidad con `what-if` sin ejecutar nada.
+
+**Anatomía de un archivo**:
+```bicep
+param location string              // entrada: quien use este archivo debe darle un valor
+param acrName string
+
+resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+//     ↑         ↑                                    ↑
+//  nombre    tipo de recurso                  versión de la API de Azure
+//  simbólico (Microsoft.<Servicio>/<tipo>)
+  name: acrName                     // el nombre REAL en Azure
+  location: location
+  sku: { name: 'Basic' }
+}
+
+output acrLoginServer string = acr.properties.loginServer   // salida: lo que este archivo "devuelve"
+```
+`acr` es solo una etiqueta para referirte al recurso **dentro de este mismo archivo** (ej. `acr.id`), aunque el recurso no exista todavía cuando escribes el código — Bicep resuelve esas referencias al desplegar.
+
+**Dependencias implícitas**: si un recurso menciona `otroRecurso.id` en sus propiedades, Bicep automáticamente sabe que debe crear `otroRecurso` primero. No existe (ni hace falta) un `dependsOn` manual en la mayoría de los casos — la sola referencia ya establece el orden.
+
+**Módulos**: un módulo es otro archivo `.bicep` tratado como una caja negra reutilizable, con sus propios `param` (entradas) y `output` (salidas):
+```bicep
+module network 'modules/network.bicep' = {
+  name: 'network'                   // nombre de ESTA operación de despliegue anidada
+  params: { location: location }
+}
+
+module containerAppsEnvironment 'modules/containerAppsEnvironment.bicep' = {
+  name: 'containerAppsEnvironment'
+  params: {
+    infraSubnetId: network.outputs.infraSubnetId   // el output de un módulo alimenta el input de otro
+  }
+}
+```
+Así se encadenan 8 archivos en un solo sistema coherente: cada módulo produce outputs que el siguiente consume como inputs, y Bicep resuelve el orden solo.
+
+**Managed Identity + RBAC, sin buscar el `principalId` a mano**: `identity: { type: 'SystemAssigned' }` en un Container App hace que Azure genere su Managed Identity automáticamente; `output principalId string = containerApp.identity.principalId` la expone; y en `main.bicep` se usa directo (`productsApi.outputs.principalId`) para crear el role assignment, sin nunca correr `az containerapp show --query identity.principalId` manualmente.
+
+**Nombres deterministas con `guid()`**: `name: guid(scope.id, 'productsapi', roleId)` genera siempre el MISMO GUID para los mismos 3 valores de entrada — así Bicep sabe "esto ya existe" en despliegues repetidos, a diferencia de `az role assignment create`, que genera un nombre aleatorio cada vez.
+
+**Operador ternario para reutilizar un módulo en casos distintos**:
+```bicep
+ingress: ingressExternal ? { external: true, targetPort: targetPort, transport: 'Auto' } : null
+```
+Así el mismo `containerApp.bicep` sirve tanto para apps con URL pública (`productsapi`) como para workers sin ingress (`inventory-worker`), según el parámetro que le pases.
+
+
 Se convirtió la arquitectura completa (VNet, ACR, Container Apps Environment,
 Service Bus con filtros, SQL + Private Endpoint, 6 Container Apps + RBAC) a
 Bicep modular en `infra/` (ver `infra/README.md` en el repo para la
