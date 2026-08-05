@@ -58,3 +58,37 @@ az deployment group create \
 `what-if` no aplica ningún cambio — solo muestra qué haría. Úsalo siempre
 antes de un `create` real, sobre todo si ya tienes recursos existentes en el
 resource group.
+
+## CI/CD: dev → staging → prod (`.github/workflows/deploy-infra.yml`)
+
+Mismo Bicep, distinto archivo de parámetros por ambiente
+(`infra/environments/{dev,staging,prod}.parameters.json`). El workflow
+despliega en secuencia — `staging` no arranca hasta que `dev` termine bien,
+y `prod` no arranca hasta que `staging` termine bien — así el mismo commit
+avanza por los 3 ambientes sin reescribirse en el camino.
+
+### Configuración necesaria (una sola vez, en el portal/CLI)
+
+**1. Azure AD App Registration + federación OIDC** (sin passwords/secrets guardados en GitHub):
+```bash
+az ad app create --display-name "github-actions-microservices-demo"
+APP_ID=$(az ad app list --display-name "github-actions-microservices-demo" --query "[0].appId" -o tsv)
+az ad sp create --id $APP_ID
+
+# Un federated credential POR CADA ambiente de GitHub que uses (dev/staging/prod)
+az ad app federated-credential create --id $APP_ID --parameters '{
+  "name": "github-dev",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:dcastro-imp/azure-microservices-demo:environment:dev",
+  "audiences": ["api://AzureADTokenExchange"]
+}'
+# Repetir para "environment:staging" y "environment:prod"
+
+az role assignment create --assignee $APP_ID --role Contributor --scope /subscriptions/<sub-id>
+```
+
+**2. GitHub → Settings → Environments**: crear `dev`, `staging`, `prod`.
+   - En `staging` y `prod`: activar **"Required reviewers"** — así el pipeline se detiene y pide aprobación manual antes de avanzar (el equivalente a una "approval gate" de CodePipeline).
+   - En cada uno: agregar las variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `ACR_NAME` (con los valores de CADA ambiente — así `dev` apunta a su propio ACR/suscripción, distinto de `prod`).
+
+**3. Correr el workflow**: `Actions` → `Deploy infrastructure` → `Run workflow` (es manual a propósito — cambios de infra no deberían dispararse en cada commit como el código de la app).

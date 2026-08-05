@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "acrName": { "value": "acrmicroservicesstaging" },
+    "sqlServerName": { "value": "sql-microservices-staging" },
+    "serviceBusNamespaceName": { "value": "sb-microservices-staging" },
+    "sqlAdminLogin": { "value": "you@yourdomain.com" },
+    "sqlAdminObjectId": { "value": "<object-id>" },
+    "imageTag": { "value": "staging" }
+  }
+}
