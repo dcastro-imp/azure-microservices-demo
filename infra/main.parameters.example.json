@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "acrName": { "value": "acrmicroservicesyourname" },
+    "sqlServerName": { "value": "sql-microservices-yourname" },
+    "serviceBusNamespaceName": { "value": "sb-microservices-yourname" },
+    "sqlAdminLogin": { "value": "you@yourdomain.com" },
+    "sqlAdminObjectId": { "value": "<az ad signed-in-user show --query id -o tsv>" }
+  }
+}

@@ -740,6 +740,53 @@ await cmd.ExecuteNonQueryAsync();
 
 ---
 
+## Proyecto 4: Infraestructura como código (Bicep) para los microservicios
+
+Se convirtió la arquitectura completa (VNet, ACR, Container Apps Environment,
+Service Bus con filtros, SQL + Private Endpoint, 6 Container Apps + RBAC) a
+Bicep modular en `infra/` (ver `infra/README.md` en el repo para la
+estructura y las limitaciones conocidas — Bicep no puede ejecutar `CREATE
+USER FROM EXTERNAL PROVIDER` en SQL, ni construir/pushear imágenes Docker).
+
+### `az deployment group what-if`: encontrar drift sin arriesgar nada
+
+En vez de aplicar el Bicep directo contra infraestructura ya viva (riesgoso),
+se usó `what-if` — que compara el Bicep contra el estado real de Azure **sin
+cambiar nada**, y reporta qué crearía/modificaría/dejaría igual:
+
+```bash
+az deployment group what-if --resource-group rg-microservices \
+  --template-file main.bicep --parameters main.parameters.json
+```
+
+Esto encontró **drift real** en una infraestructura que se había construido
+de forma imperativa a lo largo de varias sesiones:
+
+| Hallazgo | Causa | Resolución |
+|---|---|---|
+| Un Log Analytics Workspace "nuevo" a crear | El Bicep no sabía el nombre del workspace que el CLI había creado automáticamente (`workspace-rgmicroservicesijUs`) — sin especificarlo, generaría uno con nombre distinto | Parametrizar `logAnalyticsWorkspaceName` en el módulo y pasarle el nombre real existente |
+| `maxDeliveryCount: 2` en `inventory-sub` vs. el default de Azure (`10`) que el Bicep asume | Quedó en 2 por algún cambio manual anterior en la sesión, nunca documentado | Se alineó la infraestructura real al valor sano por defecto (`az servicebus topic subscription update --max-delivery-count 10`) en vez de "codificar" un valor accidental en el IaC |
+| 11 role assignments marcados como "a crear" aunque ya existen equivalentes | Bicep genera nombres de `roleAssignment` deterministas vía `guid(...)`; los creados por `az role assignment create` tienen nombres aleatorios — Bicep no puede saber que "ya existe uno equivalente" | Inofensivo si se aplica (Azure permite duplicados funcionales), pero queda documentado como diferencia esperada entre infra creada por CLI vs. por Bicep desde el día uno |
+| **2 Log Analytics Workspaces huérfanos** encontrados en el resource group | Cada vez que se recreó el Container Apps Environment (ej. al migrar a VNet), el CLI generó uno nuevo automáticamente sin borrar el anterior | `az monitor log-analytics workspace delete` en el que no coincidía con el `customerId` realmente en uso por el environment activo |
+
+**Lección clave**: `what-if` es valioso incluso si nunca vas a "aplicar" el
+Bicep sobre esa infraestructura — el solo ejercicio de compararlo revela
+recursos huérfanos y configuración que se salió de sincronía con lo que
+documentas como "el diseño", algo que pasa naturalmente cuando la
+infraestructura se construye a mano a lo largo de muchas sesiones.
+
+### Sintaxis de Bicep: comillas simples, no dobles
+
+```bicep
+// ❌ Error BCP103
+sqlExpression: "sys.Label = 'OrderCreated'"
+
+// ✅ Correcto: comillas simples, escapando las internas
+sqlExpression: 'sys.Label = \'OrderCreated\''
+```
+
+---
+
 ## Aprendizajes generales (aplican a cualquier proyecto Azure)
 
 1. **Resource Providers**: cada namespace de servicio (`Microsoft.Sql`, `Microsoft.Storage`, etc.) debe registrarse una vez por suscripción antes de su primer uso. Si ves `MissingSubscriptionRegistration` o `SubscriptionNotFound` en un servicio que nunca usaste, registra el provider.
