@@ -77,3 +77,4 @@ Ver [`infra/README.md`](infra/README.md).
 ## Documentación
 
 - [`docs/AZURE-LEARNING-GUIDE.md`](docs/AZURE-LEARNING-GUIDE.md) — guía completa, incluye teoría de networking, RBAC, KEDA, troubleshooting real.
+- [`docs/AZ-900-STUDY-PATH.md`](docs/AZ-900-STUDY-PATH.md) — path de estudio para el examen AZ-900, mapeando qué de este proyecto ya cubre el temario y qué falta repasar de forma puramente conceptual.
