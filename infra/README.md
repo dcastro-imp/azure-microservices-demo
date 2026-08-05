@@ -59,7 +59,24 @@ az deployment group create \
 antes de un `create` real, sobre todo si ya tienes recursos existentes en el
 resource group.
 
-## CI/CD: dev → staging → prod (`.github/workflows/deploy-infra.yml`)
+## CI/CD: flujo completo automatizado
+
+```mermaid
+flowchart LR
+    Dev["Developer abre PR<br/>tocando infra/"] --> Validate["validate-infra.yml<br/>(automático)<br/>bicep build + what-if<br/>resultado visible en el PR"]
+    Validate --> Review["Humano revisa el PR<br/>+ el what-if"]
+    Review -->|Merge a main| Deploy["deploy-infra.yml<br/>se dispara SOLO"]
+    Deploy --> DevEnv["Deploy a dev<br/>(sin aprobación)"]
+    DevEnv --> StagingGate["Pausa: espera aprobación<br/>(GitHub Environment 'staging')"]
+    StagingGate -->|Alguien aprueba| StagingEnv["Deploy a staging"]
+    StagingEnv --> ProdGate["Pausa: espera aprobación<br/>(GitHub Environment 'prod')"]
+    ProdGate -->|Alguien aprueba| ProdEnv["Deploy a prod"]
+```
+
+**Ningún paso requiere correr un comando a mano** — el único "trabajo humano" en todo el flujo es: revisar el PR, y hacer clic en "Approve" dos veces (staging, prod). Todo lo demás (build, validación, despliegue) es 100% automático.
+
+- `validate-infra.yml`: corre en **cada PR** que toque `infra/` — compila el Bicep y corre `what-if`, publicando el resultado como resumen del check (visible directo en la pestaña de checks del PR, sin aplicar nada).
+- `deploy-infra.yml`: corre automático **al hacer merge a `main`** — encadena dev → staging → prod, pausando en los ambientes con revisores requeridos.
 
 Mismo Bicep, distinto archivo de parámetros por ambiente
 (`infra/environments/{dev,staging,prod}.parameters.json`). El workflow

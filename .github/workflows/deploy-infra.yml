@@ -1,10 +1,17 @@
 name: Deploy infrastructure (dev -> staging -> prod)
 
-# Manual trigger on purpose: infra changes are less frequent than app code
-# changes, and you usually want to choose exactly when to run this — unlike
-# app deploys, which often trigger automatically on every merge to main.
+# Runs automatically whenever infra/ changes land on main (i.e. right after a
+# PR is merged — see validate-infra.yml for what runs BEFORE merge, on the PR
+# itself). "Automatic" only means the workflow STARTS on its own; staging and
+# prod still pause for a human to click "Approve" via each GitHub Environment's
+# required reviewers — nobody needs to manually trigger anything, but nothing
+# reaches prod without an explicit human decision either.
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+  workflow_dispatch:   # still available as a manual override/re-run button
 
 permissions:
   id-token: write   # required for OIDC login to Azure — no stored secrets/passwords

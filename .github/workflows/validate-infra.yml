@@ -1,0 +1,40 @@
+name: Validate infrastructure (PR check)
+
+# Runs on every PR that touches infra/ — shows exactly what would change,
+# WITHOUT applying anything. Reviewers see this before approving the PR.
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  what-if:
+    runs-on: ubuntu-latest
+    environment: dev   # validate against dev's subscription/resource group
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Bicep build (catches syntax errors fast, before what-if)
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
+      - name: What-if against dev
+        run: |
+          echo "## Bicep what-if (dev)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          az deployment group what-if \
+            --resource-group rg-microservices-dev \
+            --template-file infra/main.bicep \
+            --parameters infra/environments/dev.parameters.json \
+            --no-pretty-print >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
