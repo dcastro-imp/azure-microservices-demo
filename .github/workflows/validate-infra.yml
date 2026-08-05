@@ -1,11 +1,14 @@
 name: Validate infrastructure (PR check)
 
-# Runs on every PR that touches infra/ — shows exactly what would change,
-# WITHOUT applying anything. Reviewers see this before approving the PR.
+# Runs on EVERY PR (no path filter on the trigger itself) — this is
+# intentional: if this workflow only triggered for infra/ changes, any PR
+# marked as "required" for this check but that doesn't touch infra/ would
+# get stuck waiting forever for a check that never runs (a real GitHub
+# gotcha we hit — see docs/AZURE-LEARNING-GUIDE.md). Instead, the job always
+# runs and short-circuits internally when there's nothing to validate, so
+# the required check always reports a real result either way.
 on:
   pull_request:
-    paths:
-      - 'infra/**'
 
 permissions:
   id-token: write
@@ -18,7 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect infra/ changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            infra:
+              - 'infra/**'
+
       - name: Login to Azure (OIDC)
+        if: steps.changes.outputs.infra == 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -26,9 +38,11 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Bicep build (catches syntax errors fast, before what-if)
+        if: steps.changes.outputs.infra == 'true'
         run: az bicep build --file infra/main.bicep --stdout > /dev/null
 
       - name: What-if against dev
+        if: steps.changes.outputs.infra == 'true'
         run: |
           echo "## Bicep what-if (dev)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -38,3 +52,7 @@ jobs:
             --parameters infra/environments/dev.parameters.json \
             --no-pretty-print >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: No infra changes
+        if: steps.changes.outputs.infra != 'true'
+        run: echo "## No infra/ changes in this PR — nothing to validate." >> $GITHUB_STEP_SUMMARY
