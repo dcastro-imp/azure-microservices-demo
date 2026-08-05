@@ -948,6 +948,39 @@ az monitor activity-log alert create --name alert-resource-deleted --resource-gr
 ```
 Un **Action Group** es el "hacia dónde" de cualquier alerta (email, SMS, webhook, Logic App...) — se define una sola vez y se reutiliza en muchas alertas distintas. Una **Activity Log Alert** dispara sobre *operaciones de gestión* (crear/borrar/modificar recursos), a diferencia de una alerta de *métricas* (CPU, memoria) que vigila el comportamiento en tiempo de ejecución.
 
+#### 🔎 Problema real encontrado al probar la alerta con un borrado bloqueado
+
+Al probar la alerta intentando borrar (bloqueado por el lock) `sql-microservices-dennis` y el resource group completo, **no llegó ninguna notificación**. Investigando el Activity Log directamente:
+
+```bash
+az monitor activity-log list --offset 30m \
+  --query "[?contains(operationName.value, 'delete')].{time: eventTimestamp, status: status.value, operation: operationName.value}"
+```
+
+Dos hallazgos:
+1. **El intento de `az group delete` (grupo completo) nunca generó ni un solo evento en el Activity Log** — cuando el `ScopeLocked` rechaza la operación tan temprano (en la validación de autorización), Azure ni siquiera la registra como una "operación intentada". La alerta no falló — el evento que buscaba simplemente nunca existió.
+2. **El intento de `az sql server delete` (recurso individual) SÍ quedó registrado** (`Started` → `Failed`), pero la condición de la alerta buscaba únicamente `operationName = Microsoft.Resources/subscriptions/resourceGroups/delete` — una operación completamente distinta a `Microsoft.Sql/servers/delete`. La alerta estaba configurada **demasiado angosta**.
+
+**Corrección**: se reescribió la condición con `anyOf` para cubrir el borrado de cualquier recurso clave del proyecto (SQL, Container Apps, VNet, Service Bus, ACR), vía `az rest` (el CLI de `activity-log alert update` no expone edición de condición fácilmente):
+```json
+"condition": {
+  "allOf": [
+    { "field": "category", "equals": "Administrative" },
+    { "field": "status", "equals": "Failed" },
+    { "anyOf": [
+        { "field": "operationName", "equals": "Microsoft.Sql/servers/delete" },
+        { "field": "operationName", "equals": "Microsoft.App/containerApps/delete" },
+        { "field": "operationName", "equals": "Microsoft.Resources/subscriptions/resourceGroups/delete" }
+        // ... resto de recursos clave
+    ]}
+  ]
+}
+```
+
+**Segundo hallazgo, más sutil**: sin el filtro `status = Failed`, la primera versión corregida **notificó 2 veces por el mismo intento** — porque una sola operación de Azure genera *múltiples* eventos en el Activity Log (`Started`, luego `Succeeded`/`Failed`), y la condición no distinguía entre fases. Agregar `status = Failed` deja solo 1 notificación por intento bloqueado — con el trade-off consciente de que un borrado **exitoso** (si algún día se quita el lock a propósito) ya no dispararía esta alerta específica; habría que agregar `status = Succeeded` aparte si se quiere cubrir ambos casos.
+
+**Lección de fondo**: una alerta "que no llegó" no siempre significa que la alerta esté mal configurada — primero hay que confirmar que el **evento que se espera capturar realmente se registró**, con el `operationName` y `status` exactos, antes de asumir que la configuración de la alerta falló.
+
 ---
 
 ## Aprendizajes generales (aplican a cualquier proyecto Azure)
