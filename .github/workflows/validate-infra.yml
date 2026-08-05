@@ -33,7 +33,7 @@ jobs:
           echo "## Bicep what-if (dev)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           az deployment group what-if \
-            --resource-group rg-microservices-dev \
+            --resource-group rg-microservices \
             --template-file infra/main.bicep \
             --parameters infra/environments/dev.parameters.json \
             --no-pretty-print >> $GITHUB_STEP_SUMMARY
