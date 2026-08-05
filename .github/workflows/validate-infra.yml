@@ -1,12 +1,13 @@
 name: Validate infrastructure (PR check)
 
-# Runs on EVERY PR (no path filter on the trigger itself) — this is
-# intentional: if this workflow only triggered for infra/ changes, any PR
-# marked as "required" for this check but that doesn't touch infra/ would
-# get stuck waiting forever for a check that never runs (a real GitHub
-# gotcha we hit — see docs/AZURE-LEARNING-GUIDE.md). Instead, the job always
-# runs and short-circuits internally when there's nothing to validate, so
-# the required check always reports a real result either way.
+# Runs on EVERY PR (no path filter on the trigger itself) — if this workflow
+# only triggered for infra/ changes, any PR that doesn't touch infra/ would
+# get stuck waiting forever for a required check that never runs (a real
+# gotcha — see docs/AZURE-LEARNING-GUIDE.md). Instead: a cheap job always
+# detects whether infra/ changed, and the real "what-if" job is gated at the
+# JOB level on that result. A job skipped via `if:` is reported by GitHub as
+# "skipped", which counts as a pass for required status checks — so the
+# check always resolves one way or another, without conditioning every step.
 on:
   pull_request:
 
@@ -15,22 +16,28 @@ permissions:
   contents: read
 
 jobs:
-  what-if:
+  detect-changes:
     runs-on: ubuntu-latest
-    environment: dev   # validate against dev's subscription/resource group
+    outputs:
+      infra: ${{ steps.filter.outputs.infra }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Detect infra/ changes
-        id: changes
-        uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v3
+        id: filter
         with:
           filters: |
             infra:
               - 'infra/**'
 
+  what-if:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    environment: dev   # validate against dev's subscription/resource group
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Login to Azure (OIDC)
-        if: steps.changes.outputs.infra == 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -38,11 +45,9 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Bicep build (catches syntax errors fast, before what-if)
-        if: steps.changes.outputs.infra == 'true'
         run: az bicep build --file infra/main.bicep --stdout > /dev/null
 
       - name: What-if against dev
-        if: steps.changes.outputs.infra == 'true'
         run: |
           echo "## Bicep what-if (dev)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -52,7 +57,3 @@ jobs:
             --parameters infra/environments/dev.parameters.json \
             --no-pretty-print >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: No infra changes
-        if: steps.changes.outputs.infra != 'true'
-        run: echo "## No infra/ changes in this PR — nothing to validate." >> $GITHUB_STEP_SUMMARY
