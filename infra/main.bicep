@@ -54,6 +54,17 @@ module acr 'modules/acr.bicep' = {
   }
 }
 
+// --- Shared identity for pulling images from ACR (see modules/acrPullIdentity.bicep
+// for why this must be its own resource, created and granted BEFORE any
+// Container App exists) ---
+module acrPullIdentity 'modules/acrPullIdentity.bicep' = {
+  name: 'acrPullIdentity'
+  params: {
+    location: location
+    acrId: acr.outputs.acrId
+  }
+}
+
 // --- Container Apps Environment (VNet-integrated) ---
 module containerAppsEnvironment 'modules/containerAppsEnvironment.bicep' = {
   name: 'containerAppsEnvironment'
@@ -109,7 +120,7 @@ module productsApi 'modules/containerApp.bicep' = {
     name: 'productsapi'
     environmentId: containerAppsEnvironment.outputs.environmentId
     acrLoginServer: acr.outputs.acrLoginServer
-    acrId: acr.outputs.acrId
+    acrPullIdentityId: acrPullIdentity.outputs.identityId
     image: '${acr.outputs.acrLoginServer}/productsapi:${imageTag}'
     targetPort: 8080
     ingressExternal: true
@@ -134,7 +145,7 @@ module inventoryWorker 'modules/containerApp.bicep' = {
     name: 'inventory-worker'
     environmentId: containerAppsEnvironment.outputs.environmentId
     acrLoginServer: acr.outputs.acrLoginServer
-    acrId: acr.outputs.acrId
+    acrPullIdentityId: acrPullIdentity.outputs.identityId
     image: '${acr.outputs.acrLoginServer}/inventoryworker:${imageTag}'
     secrets: [
       { name: 'sql-conn', value: sqlConnectionString }
@@ -175,7 +186,7 @@ module shippingWorker 'modules/containerApp.bicep' = {
     name: 'shipping-worker'
     environmentId: containerAppsEnvironment.outputs.environmentId
     acrLoginServer: acr.outputs.acrLoginServer
-    acrId: acr.outputs.acrId
+    acrPullIdentityId: acrPullIdentity.outputs.identityId
     image: '${acr.outputs.acrLoginServer}/shippingworker:${imageTag}'
     secrets: [
       { name: 'sql-conn', value: sqlConnectionString }
@@ -208,7 +219,7 @@ module notificationWorker 'modules/containerApp.bicep' = {
     name: 'notification-worker'
     environmentId: containerAppsEnvironment.outputs.environmentId
     acrLoginServer: acr.outputs.acrLoginServer
-    acrId: acr.outputs.acrId
+    acrPullIdentityId: acrPullIdentity.outputs.identityId
     image: '${acr.outputs.acrLoginServer}/notificationworker:${imageTag}'
     secrets: [
       { name: 'servicebus-conn', value: sbConnectionString }
@@ -247,7 +258,7 @@ module auditWorker 'modules/containerApp.bicep' = {
     name: 'audit-worker'
     environmentId: containerAppsEnvironment.outputs.environmentId
     acrLoginServer: acr.outputs.acrLoginServer
-    acrId: acr.outputs.acrId
+    acrPullIdentityId: acrPullIdentity.outputs.identityId
     image: '${acr.outputs.acrLoginServer}/auditworker:${imageTag}'
     secrets: [
       { name: 'sql-conn', value: sqlConnectionString }
@@ -280,7 +291,7 @@ module frontend 'modules/containerApp.bicep' = {
     name: 'frontend'
     environmentId: containerAppsEnvironment.outputs.environmentId
     acrLoginServer: acr.outputs.acrLoginServer
-    acrId: acr.outputs.acrId
+    acrPullIdentityId: acrPullIdentity.outputs.identityId
     image: '${acr.outputs.acrLoginServer}/frontend:${imageTag}'
     targetPort: 80
     ingressExternal: true

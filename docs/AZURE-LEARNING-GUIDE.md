@@ -826,6 +826,56 @@ recursos huérfanos y configuración que se salió de sincronía con lo que
 documentas como "el diseño", algo que pasa naturalmente cuando la
 infraestructura se construye a mano a lo largo de muchas sesiones.
 
+### 🔥 La prueba definitiva: borrar todo y reconstruir 100% desde el Bicep
+
+Se borró `rg-microservices` por completo y se reconstruyó únicamente con `az deployment group create` + `scripts/sql/*.sql` — la prueba de fuego real de que el IaC sirve de verdad, no solo en teoría (`what-if`).
+
+**Encontró un bug real de circularidad que `what-if` nunca podría haber detectado** (porque `what-if` solo compara contra infraestructura que ya existía; en una reconstrucción desde cero, el problema aparece por primera vez):
+
+```
+Error: "Failed to provision revision for container app 'X'. Operation expired."
+```
+
+**Causa raíz**: el Bicep original otorgaba el permiso `AcrPull` usando el `principalId` de la propia Container App (su Managed Identity de tipo `SystemAssigned`). Pero:
+1. Azure no considera "creada" una Container App hasta que **logra arrancar un contenedor** (descargar la imagen incluido).
+2. El role assignment de `AcrPull` solo se crea **después** de que la Container App termine de "crearse".
+3. Para descargar la imagen, la Container App necesita el permiso `AcrPull` — que todavía no existe.
+
+Es un círculo imposible: *se necesita el permiso para terminar de crearse, pero el permiso se crea después de terminar de crearse.* El CLI (`az containerapp create --registry-identity system`) nunca tuvo este problema porque hace esto en **llamadas separadas** (crea identidad → otorga permiso → recién intenta arrancar) — Bicep, al ser una sola operación declarativa, expone el círculo.
+
+**Solución (patrón oficial de Azure para este caso exacto)**: usar una **User-Assigned Managed Identity** compartida, creada y con el permiso `AcrPull` otorgado **antes** de que exista ninguna Container App — su `principalId` existe de forma independiente, sin depender de ningún Container App:
+
+```bicep
+// modules/acrPullIdentity.bicep
+resource acrPullIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-acr-pull'
+  location: location
+}
+resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acrId, 'id-acr-pull', 'AcrPull')
+  scope: resourceGroup()
+  properties: {
+    principalId: acrPullIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+  }
+}
+```
+
+Y cada Container App combina **dos identidades a la vez** — su propia `SystemAssigned` (para Service Bus/SQL) + la `UserAssigned` compartida (solo para el pull de ACR):
+```bicep
+identity: {
+  type: 'SystemAssigned, UserAssigned'
+  userAssignedIdentities: { '${acrPullIdentityId}': {} }
+}
+// ...
+registries: [{ server: acrLoginServer, identity: acrPullIdentityId }]
+```
+
+**Lección clave**: `what-if` valida contra infraestructura EXISTENTE — no sustituye probar una reconstrucción completa desde cero al menos una vez. Algunos bugs de IaC (como dependencias circulares) solo aparecen genuinamente en un despliegue "greenfield".
+
+**Nota aparte**: `frontend` falló una vez con el mismo mensaje "Operation expired" incluso con el fix — pero al revisar, el contenedor SÍ había arrancado (`runningStatus: Running`), solo tardó más que el timeout de ARM en pull+start (imagen más pesada). Un segundo `az deployment group create` (idempotente) lo resolvió sin tocar nada más.
+
 ### Sintaxis de Bicep: comillas simples, no dobles
 
 ```bicep

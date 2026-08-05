@@ -6,7 +6,8 @@ param location string
 param name string
 param environmentId string
 param acrLoginServer string
-param acrId string
+@description('Resource ID of the shared User-Assigned Identity used to pull from ACR (see modules/acrPullIdentity.bicep) — must already have AcrPull granted BEFORE this app is created, since a System-Assigned identity would not exist yet at image-pull time.')
+param acrPullIdentityId string
 param image string
 param targetPort int = 0
 param ingressExternal bool = false
@@ -23,7 +24,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
   location: location
   identity: {
-    type: 'SystemAssigned'
+    // SystemAssigned: this app's own identity, used for Service Bus/SQL access.
+    // UserAssigned (id-acr-pull): pre-existing identity, already granted
+    // AcrPull, used ONLY so the platform can pull the image at creation time.
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: {
+      '${acrPullIdentityId}': {}
+    }
   }
   properties: {
     managedEnvironmentId: environmentId
@@ -32,7 +39,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acrLoginServer
-          identity: 'system'
+          identity: acrPullIdentityId
         }
       ]
       ingress: ingressExternal ? {
@@ -59,19 +66,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         rules: scaleRules
       }
     }
-  }
-}
-
-// Grants this app's own Managed Identity permission to pull from ACR —
-// the CLI's `--registry-identity system` flag does this automatically;
-// in Bicep it must be created explicitly.
-resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acrId, name, 'AcrPull')
-  scope: resourceGroup()
-  properties: {
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
   }
 }
 
