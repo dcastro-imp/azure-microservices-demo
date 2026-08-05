@@ -4,6 +4,9 @@ param acrName string
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName
   location: location
+  tags: {
+    environment: 'test-cicd-pipeline'
+  }
   sku: {
     name: 'Basic'
   }

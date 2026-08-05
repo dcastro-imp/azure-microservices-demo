@@ -43,7 +43,7 @@ jobs:
       - name: Deploy Bicep
         run: |
           az deployment group create \
-            --resource-group rg-microservices-dev \
+            --resource-group rg-microservices \
             --template-file infra/main.bicep \
             --parameters infra/environments/dev.parameters.json
 
