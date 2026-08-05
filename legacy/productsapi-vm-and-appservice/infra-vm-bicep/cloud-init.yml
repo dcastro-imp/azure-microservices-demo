@@ -1,0 +1,67 @@
+#cloud-config
+package_update: true
+packages:
+  - nginx
+  - unzip
+  - wget
+
+write_files:
+  - path: /etc/systemd/system/products-api.service
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Products API
+      After=network.target
+
+      [Service]
+      User=productsapi
+      Group=productsapi
+      WorkingDirectory=/opt/products-api/app
+      Environment=ASPNETCORE_URLS=http://127.0.0.1:__APP_PORT__
+      Environment="ConnectionStrings__Default=Data Source=/opt/products-api/data/products.db"
+      ExecStart=/usr/bin/dotnet /opt/products-api/app/ProductsApi.dll
+      Restart=always
+      RestartSec=5
+      KillSignal=SIGINT
+      SyslogIdentifier=products-api
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/nginx/sites-available/products-api
+    permissions: '0644'
+    owner: root:root
+    content: |
+      server {
+          listen 80 default_server;
+          listen [::]:80 default_server;
+
+          location / {
+              proxy_pass http://127.0.0.1:__APP_PORT__;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection keep-alive;
+          }
+      }
+
+runcmd:
+  - wget https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb
+  - dpkg -i /tmp/packages-microsoft-prod.deb
+  - apt-get update
+  - apt-get install -y aspnetcore-runtime-10.0
+  - useradd --system --home /opt/products-api --shell /usr/sbin/nologin productsapi || true
+  - mkdir -p /opt/products-api/app
+  - mkdir -p /opt/products-api/data
+  - chown -R productsapi:productsapi /opt/products-api
+  - rm -f /etc/nginx/sites-enabled/default
+  - ln -sf /etc/nginx/sites-available/products-api /etc/nginx/sites-enabled/products-api
+  - nginx -t
+  - systemctl enable nginx
+  - systemctl restart nginx
+  - systemctl daemon-reload
+  - systemctl enable products-api

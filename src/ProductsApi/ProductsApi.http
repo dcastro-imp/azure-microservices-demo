@@ -1,0 +1,34 @@
+@host = http://localhost:5080
+
+### Get all products
+GET {{host}}/api/products
+Accept: application/json
+
+### Get a single product by id
+GET {{host}}/api/products/1
+Accept: application/json
+
+### Create a new product
+POST {{host}}/api/products
+Content-Type: application/json
+
+{
+  "name": "Wireless Mouse",
+  "category": "Electronics",
+  "price": 25.99,
+  "stock": 100
+}
+
+### Update an existing product (replace all fields)
+PUT {{host}}/api/products/1
+Content-Type: application/json
+
+{
+  "name": "Gaming Laptop",
+  "category": "Electronics",
+  "price": 1500.00,
+  "stock": 10
+}
+
+### Delete a product
+DELETE {{host}}/api/products/2

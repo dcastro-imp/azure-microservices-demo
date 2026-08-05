@@ -1,0 +1,61 @@
+name: Deploy API to Azure VM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore ProductsApi.csproj --runtime linux-arm64
+
+      - name: Build
+        run: dotnet build ProductsApi.csproj --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish ProductsApi.csproj --configuration Release --runtime linux-arm64 --self-contained false --output ./publish
+
+      - name: Create deployment archive
+        run: |
+          tar -czf products-api.tar.gz -C publish .
+
+      - name: Copy artifact to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          source: "products-api.tar.gz"
+          target: "/tmp/products-api-deploy"
+          overwrite: true
+
+      - name: Deploy and restart service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+            sudo mkdir -p /opt/products-api/app
+            sudo tar -xzf /tmp/products-api-deploy/products-api.tar.gz -C /opt/products-api/app
+            sudo chown -R productsapi:productsapi /opt/products-api/app
+            sudo systemctl daemon-reload
+            sudo systemctl restart products-api
+            sudo systemctl status products-api --no-pager
