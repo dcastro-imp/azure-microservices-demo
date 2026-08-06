@@ -135,6 +135,19 @@ sin laboratorios ni hands-on. Recurso oficial gratis: [Microsoft Learn - AZ-900]
 
 ---
 
+## Repaso de errores reales (Practice Assessment oficial, 80% primer intento)
+
+Conceptos fallados en el primer intento del [Practice Assessment oficial](https://learn.microsoft.com/credentials/certifications/exams/az-900/practice/assessment?assessment-type=practice&assessmentId=23) — quedaron confirmados como entendidos tras el repaso:
+
+1. **ARM vs Azure CLI vs API Management**: ARM es la capa de gestión de fondo (crea/actualiza/borra recursos); CLI/PowerShell/Portal son solo herramientas que le hablan a ARM; API Management es para publicar TUS PROPIAS APIs, nada que ver con desplegar recursos.
+2. **SaaS se licencia por suscripción fija**; PaaS/IaaS son pago por consumo.
+3. **VNet Peering conecta VNets entre sí**; NSG es solo un firewall, no conecta redes.
+4. **Conditional Access evalúa contexto** (dispositivo, ubicación); MFA es solo "pide un factor extra", una posible acción DENTRO de una regla de Conditional Access.
+5. **Defense in Depth = múltiples capas de seguridad**; Least Privilege es una práctica específica, una pieza de Defense in Depth, no el nombre de la estrategia completa.
+6. **Cost Management administra costos de lo ya desplegado** (budgets, históricos, pronósticos); TCO Calculator compara ANTES de desplegar (on-premises vs Azure).
+7. **Azure Arc** extiende la gestión de Azure a recursos fuera de Azure (on-premises, AWS, GCP, Kubernetes) — aparecen en el portal como nativos.
+8. **Azure Monitor** es la plataforma completa y puede disparar autoscaling; **Application Insights** es solo la parte de rendimiento de aplicación (APM) dentro de Monitor.
+
 ## Plan de repaso sugerido
 
 Dado que ya tienes MUCHO del Dominio 2 y 3 cubierto por experiencia real, el repaso eficiente es:
