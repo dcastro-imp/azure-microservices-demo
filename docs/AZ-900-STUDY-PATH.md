@@ -148,6 +148,16 @@ Conceptos fallados en el primer intento del [Practice Assessment oficial](https:
 7. **Azure Arc** extiende la gestión de Azure a recursos fuera de Azure (on-premises, AWS, GCP, Kubernetes) — aparecen en el portal como nativos.
 8. **Azure Monitor** es la plataforma completa y puede disparar autoscaling; **Application Insights** es solo la parte de rendimiento de aplicación (APM) dentro de Monitor.
 
+## Segundo intento: 90% (subió de 80%, en la mitad del tiempo)
+
+Errores del segundo intento, ya confirmados como entendidos:
+
+9. **Datos e identidad/acceso de usuarios son SIEMPRE responsabilidad del cliente**, en CUALQUIER modelo (IaaS/PaaS/SaaS) — nunca son del proveedor. De igual forma, la red física/datacenter físico son SIEMPRE del proveedor, incluso en IaaS. Solo las capas de en medio (SO, controles de red, aplicación) cambian según el modelo.
+10. **Servicios para correr contenedores**: Azure Container Instances (contenedor suelto, sin orquestación) y AKS (orquestación completa) — Azure Functions es serverless por eventos, no la respuesta típica para "correr contenedores".
+11. **VPN Site-to-Site**: el *Local Network Gateway* representa la red on-premises; el *Virtual Network Gateway* representa el lado de Azure. *VNet-to-VNet* es un escenario distinto (conectar 2 VNets de Azure entre sí, no on-premises con Azure).
+12. **Remote Desktop (RDP) controla una VM que YA EXISTE** — no sirve para crear una VM nueva. Para crear/administrar desde un celular: Azure Portal o Cloud Shell (PowerShell/CLI), ambos vía navegador.
+13. **Service Health tiene 3 pestañas distintas**: *Service issues* (interrupciones activas), *Planned maintenance* (mantenimientos programados), y **Health advisories** (retiros de servicio, breaking changes futuros) — Azure Monitor no cubre esto, solo vigila TUS recursos.
+
 ## Plan de repaso sugerido
 
 Dado que ya tienes MUCHO del Dominio 2 y 3 cubierto por experiencia real, el repaso eficiente es:
