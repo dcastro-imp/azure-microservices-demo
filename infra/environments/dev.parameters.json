@@ -2,12 +2,12 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "acrName": { "value": "acrproductsdennis" },
-    "sqlServerName": { "value": "sql-microservices-dennis" },
-    "serviceBusNamespaceName": { "value": "sb-microservices-dennis" },
-    "sqlAdminLogin": { "value": "nanobot10_outlook.com#EXT#@nanobot10outlook.onmicrosoft.com" },
-    "sqlAdminObjectId": { "value": "c01e142b-5d98-463a-abfb-6d46d8e15424" },
-    "logAnalyticsWorkspaceName": { "value": "workspace-rgmicroservicesijUs" },
+    "acrName": { "value": "acrmicroservicesdev" },
+    "sqlServerName": { "value": "sql-microservices-dev" },
+    "serviceBusNamespaceName": { "value": "sb-microservices-dev" },
+    "sqlAdminLogin": { "value": "you@yourdomain.com" },
+    "sqlAdminObjectId": { "value": "<az ad signed-in-user show --query id -o tsv>" },
+    "logAnalyticsWorkspaceName": { "value": "log-microservices" },
     "imageTag": { "value": "dev" }
   }
 }

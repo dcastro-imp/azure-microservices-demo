@@ -8,3 +8,4 @@ dist/
 appsettings.Development.json
 *.db
 infra/main.parameters.json
+scripts/.suffix
