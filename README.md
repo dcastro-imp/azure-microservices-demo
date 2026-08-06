@@ -46,13 +46,27 @@ passwords ni connection strings con secretos hardcodeados).
 | `AuditWorker` | Registra cada evento del pipeline en una tabla de auditoría (sin filtro, recibe todo) |
 | `frontend` | Dashboard en React — productos, pedidos, línea de tiempo, estado de la arquitectura en vivo |
 
-## Desplegar desde cero
+## Para cualquier miembro del equipo: desplegar con TU PROPIA cuenta de Azure
 
-Los scripts en `scripts/` están numerados en el orden en que se deben correr:
+Este repo está pensado para que cualquiera lo clone y lo recree en su propia
+suscripción, sin editar nada a mano:
 
 ```bash
+az login          # con tu propia cuenta de Azure
 cd scripts
-./01-create-network.sh
+./01-create-network.sh   # este y los siguientes generan nombres únicos automáticamente
+```
+
+`scripts/00-vars.sh` (que los demás scripts cargan automáticamente) genera
+un **sufijo aleatorio único** la primera vez que corres cualquier script, y
+lo guarda en `scripts/.suffix` (no se sube a git) — así los nombres que
+deben ser únicos globalmente en Azure (ACR, SQL Server, Service Bus) nunca
+chocan entre distintas personas usando este mismo repo, sin que nadie tenga
+que editar nombres manualmente.
+
+Los scripts están numerados en el orden en que se deben correr:
+
+```bash
 ./02-create-acr-and-env.sh
 ./03-create-service-bus.sh
 ./04-create-sql.sh              # sigue las instrucciones que imprime al final (paso manual de esquema SQL)
@@ -72,7 +86,9 @@ Para generar carga de prueba y observar el autoscaling:
 
 ## Infraestructura como código (`infra/`)
 
-Ver [`infra/README.md`](infra/README.md).
+Ver [`infra/README.md`](infra/README.md) — incluye `scripts/setup-github-oidc.sh`,
+que conecta el pipeline de CI/CD (GitHub Actions) a tu propia cuenta de Azure
+en un solo paso, sin copiar/pegar comandos ni secretos manuales.
 
 ## Documentación
 

@@ -84,31 +84,28 @@ despliega en secuencia — `staging` no arranca hasta que `dev` termine bien,
 y `prod` no arranca hasta que `staging` termine bien — así el mismo commit
 avanza por los 3 ambientes sin reescribirse en el camino.
 
-### Configuración necesaria (una sola vez, en el portal/CLI)
+### Configuración necesaria (una sola vez por persona/fork)
 
-**1. Azure AD App Registration + federación OIDC** (sin passwords/secrets guardados en GitHub):
+**Opción rápida — script automatizado**: cualquiera con su propia cuenta de Azure y su propio fork de este repo puede correr:
 ```bash
-az ad app create --display-name "github-actions-microservices-demo"
-APP_ID=$(az ad app list --display-name "github-actions-microservices-demo" --query "[0].appId" -o tsv)
-az ad sp create --id $APP_ID
-
-# Un federated credential POR CADA ambiente de GitHub que uses (dev/staging/prod)
-az ad app federated-credential create --id $APP_ID --parameters '{
-  "name": "github-dev",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:dcastro-imp/azure-microservices-demo:environment:dev",
-  "audiences": ["api://AzureADTokenExchange"]
-}'
-# Repetir para "environment:staging" y "environment:prod"
-
-az role assignment create --assignee $APP_ID --role Contributor --scope /subscriptions/<sub-id>
+az login          # con TU cuenta de Azure
+gh auth login      # con TU cuenta de GitHub
+./scripts/setup-github-oidc.sh
 ```
+El script pregunta interactivamente (owner/repo de GitHub, resource group, nombre del ACR, qué ambientes configurar) y crea todo: el App Registration, la federación OIDC, el resource group, los permisos, los GitHub Environments, y sus variables — sin que tengas que copiar/pegar comandos manuales ni tocar secretos.
 
-**2. GitHub → Settings → Environments**: crear `dev`, `staging`, `prod`.
-   - En `staging` y `prod`: activar **"Required reviewers"** — así el pipeline se detiene y pide aprobación manual antes de avanzar (el equivalente a una "approval gate" de CodePipeline).
-   - En cada uno: agregar las variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `ACR_NAME` (con los valores de CADA ambiente — así `dev` apunta a su propio ACR/suscripción, distinto de `prod`).
+Después de correrlo, actualiza `infra/environments/dev.parameters.json` (y `staging`/`prod` si aplica) con TUS propios nombres únicos y tu email/Object ID de Azure AD (`az ad signed-in-user show --query id -o tsv`).
 
-**3. Correr el workflow**: `Actions` → `Deploy infrastructure` → `Run workflow` (es manual a propósito — cambios de infra no deberían dispararse en cada commit como el código de la app).
+**Qué hace el script paso a paso** (por si prefieres correrlo manualmente o entender el detalle):
+1. Crea un Azure AD App Registration + Service Principal
+2. Crea un *federated credential* por cada ambiente, con el `subject` `repo:<owner>/<repo>:environment:<env>`
+3. Otorga rol `Owner` **scoped solo al resource group** que le indiques (no a toda la suscripción)
+4. Crea los GitHub Environments (`staging`/`prod` con aprobación requerida del propio usuario)
+5. Configura las variables (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `ACR_NAME`) en cada ambiente
+
+**Nota real que puedes encontrar**: GitHub a veces envía el `subject` del token OIDC en un formato con IDs numéricos (`repo:owner@ownerId/repo@repoId:environment:X`) en vez del formato simple documentado — si ves el error `AADSTS700213`, el script te dice exactamente cómo diagnosticarlo y agregar el federated credential adicional que haga falta (ver también `docs/AZURE-LEARNING-GUIDE.md`).
+
+**Último paso**: correr el workflow — `Actions` → `Deploy infrastructure` → `Run workflow` (es manual a propósito — cambios de infra no deberían dispararse en cada commit como el código de la app).
 
 ### Gotchas reales encontrados al probar esto en vivo
 
