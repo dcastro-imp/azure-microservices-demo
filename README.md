@@ -46,6 +46,14 @@ passwords ni connection strings con secretos hardcodeados).
 | `AuditWorker` | Registra cada evento del pipeline en una tabla de auditoría (sin filtro, recibe todo) |
 | `frontend` | Dashboard en React — productos, pedidos, línea de tiempo, estado de la arquitectura en vivo |
 
+## Prerequisitos
+
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`), con sesión iniciada (`az login`)
+- [.NET SDK 10](https://dotnet.microsoft.com/download)
+- [Docker](https://docs.docker.com/get-docker/) (para construir/subir las imágenes)
+- [Node.js](https://nodejs.org/) 20+ (para el frontend)
+- Solo si vas a usar el pipeline de CI/CD: [GitHub CLI](https://cli.github.com/) (`gh`), con sesión iniciada (`gh auth login`)
+
 ## Para cualquier miembro del equipo: desplegar con TU PROPIA cuenta de Azure
 
 Este repo está pensado para que cualquiera lo clone y lo recree en su propia
@@ -83,6 +91,17 @@ Para generar carga de prueba y observar el autoscaling:
 ```bash
 ./scripts/load-test.sh 50
 ```
+
+### Correr el frontend en modo desarrollo (sin Docker)
+
+Útil para iterar rápido en la UI sin reconstruir la imagen cada vez:
+```bash
+cd src/frontend
+npm install
+echo "VITE_API_URL=https://<fqdn-de-tu-productsapi>" > .env
+npm run dev
+```
+El FQDN de `productsapi` lo imprime `06-deploy-container-apps.sh` al terminar (o `az containerapp show --name productsapi --resource-group rg-microservices --query properties.configuration.ingress.fqdn -o tsv`).
 
 ## Infraestructura como código (`infra/`)
 
